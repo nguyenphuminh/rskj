@@ -57,6 +57,7 @@ public class BlockHeaderBuilder {
     private byte[] bitcoinMergedMiningCoinbaseTransaction;
     private byte[] mergedMiningForkDetectionData;
     private byte[] ummRoot;
+    private short[] txExecutionListEdges;
 
     private Coin minimumGasPrice;
     private int uncleCount;
@@ -252,6 +253,12 @@ public class BlockHeaderBuilder {
         return this;
     }
 
+    public BlockHeaderBuilder setTxExecutionListEdges(short[] edges) {
+        this.txExecutionListEdges = new short[edges.length];
+        System.arraycopy(edges, 0, this.txExecutionListEdges, 0, edges.length);
+        return this;
+    }
+
     private void initializeWithDefaultValues() {
         extraData = normalizeValue(extraData, new byte[0]);
         bitcoinMergedMiningHeader = normalizeValue(bitcoinMergedMiningHeader, new byte[0]);
@@ -320,7 +327,7 @@ public class BlockHeaderBuilder {
                 mergedMiningForkDetectionData,
                 minimumGasPrice, uncleCount,
                 false, useRskip92Encoding,
-                includeForkDetectionData, ummRoot
+                includeForkDetectionData, ummRoot, txExecutionListEdges
         );
     }
 }

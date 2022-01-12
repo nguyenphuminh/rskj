@@ -21,6 +21,7 @@ package co.rsk.core.bc;
 import co.rsk.core.Coin;
 import co.rsk.core.RskAddress;
 import co.rsk.core.TransactionExecutorFactory;
+import co.rsk.core.TransactionListExecutor;
 import co.rsk.crypto.Keccak256;
 import co.rsk.db.RepositoryLocator;
 import co.rsk.metrics.profilers.Metric;
@@ -39,6 +40,8 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.LongAccumulator;
 
 import static org.ethereum.config.blockchain.upgrades.ConsensusRule.RSKIP126;
 import static org.ethereum.config.blockchain.upgrades.ConsensusRule.RSKIP85;
@@ -48,10 +51,13 @@ import static org.ethereum.config.blockchain.upgrades.ConsensusRule.RSKIP85;
  * There are two main use cases:
  * - execute and validate the block final state
  * - execute and complete the block final state
- *
+ * <p>
  * Note that this class IS NOT guaranteed to be thread safe because its dependencies might hold state.
  */
 public class BlockExecutor {
+    private static final int THREAD_COUNT = 4;
+    private static final int EXEC_TIMEOUT = 5;
+
     private static final Logger logger = LoggerFactory.getLogger("blockexecutor");
     private static final Profiler profiler = ProfilerFactory.getInstance();
 
@@ -59,7 +65,7 @@ public class BlockExecutor {
     private final TransactionExecutorFactory transactionExecutorFactory;
     private final ActivationConfig activationConfig;
 
-    private final Map<Keccak256, ProgramResult> transactionResults = new HashMap<>();
+    private final Map<Keccak256, ProgramResult> transactionResults = new ConcurrentHashMap<>();
     private boolean registerProgramResults;
 
     public BlockExecutor(
@@ -72,10 +78,46 @@ public class BlockExecutor {
     }
 
     /**
+     * Precompiled contracts storage is setup like any other contract for consistency. Here, we apply this logic on the
+     * exact activation block.
+     * This method is called automatically for every block except for the Genesis (which makes an explicit call).
+     */
+    public static void maintainPrecompiledContractStorageRoots(Repository track, ActivationConfig.ForBlock activations) {
+        if (activations.isActivating(RSKIP126)) {
+            for (RskAddress addr : PrecompiledContracts.GENESIS_ADDRESSES) {
+                if (!track.isExist(addr)) {
+                    track.createAccount(addr);
+                }
+                track.setupContract(addr);
+            }
+        }
+
+        for (Map.Entry<RskAddress, ConsensusRule> e : PrecompiledContracts.CONSENSUS_ENABLED_ADDRESSES.entrySet()) {
+            ConsensusRule contractActivationRule = e.getValue();
+            if (activations.isActivating(contractActivationRule)) {
+                RskAddress addr = e.getKey();
+                track.createAccount(addr);
+                track.setupContract(addr);
+            }
+        }
+    }
+
+    @VisibleForTesting
+    public static byte[] calculateLogsBloom(List<TransactionReceipt> receipts) {
+        Bloom logBloom = new Bloom();
+
+        for (TransactionReceipt receipt : receipts) {
+            logBloom.or(receipt.getBloomFilter());
+        }
+
+        return logBloom.getData();
+    }
+
+    /**
      * Execute and complete a block.
      *
-     * @param block        A block to execute and complete
-     * @param parent       The parent of the block.
+     * @param block  A block to execute and complete
+     * @param parent The parent of the block.
      */
     public BlockResult executeAndFill(Block block, BlockHeader parent) {
         BlockResult result = execute(block, parent, true, false);
@@ -116,8 +158,8 @@ public class BlockExecutor {
     /**
      * Execute and validate the final state of a block.
      *
-     * @param block        A block to execute and complete
-     * @param parent       The parent of the block.
+     * @param block  A block to execute and complete
+     * @param parent The parent of the block.
      * @return true if the block final state is equalBytes to the calculated final state.
      */
     @VisibleForTesting
@@ -130,8 +172,8 @@ public class BlockExecutor {
     /**
      * Validate the final state of a block.
      *
-     * @param block        A block to validate
-     * @param result       A block result (state root, receipts root, etc...)
+     * @param block  A block to validate
+     * @param result A block result (state root, receipts root, etc...)
      * @return true if the block final state is equalBytes to the calculated final state.
      */
     public boolean validate(Block block, BlockResult result) {
@@ -172,7 +214,7 @@ public class BlockExecutor {
         Coin paidFees = result.getPaidFees();
         Coin feesPaidToMiner = block.getFeesPaidToMiner();
 
-        if (!paidFees.equals(feesPaidToMiner))  {
+        if (!paidFees.equals(feesPaidToMiner)) {
             logger.error("Block {} [{}] given paidFees doesn't match: {} != {}", block.getNumber(), block.getPrintableHash(), feesPaidToMiner, paidFees);
             profiler.stop(metric);
             return false;
@@ -181,7 +223,7 @@ public class BlockExecutor {
         List<Transaction> executedTransactions = result.getExecutedTransactions();
         List<Transaction> transactionsList = block.getTransactionsList();
 
-        if (!executedTransactions.equals(transactionsList))  {
+        if (!executedTransactions.equals(transactionsList)) {
             logger.error("Block {} [{}] given txs doesn't match: {} != {}", block.getNumber(), block.getPrintableHash(), transactionsList, executedTransactions);
             profiler.stop(metric);
             return false;
@@ -269,86 +311,75 @@ public class BlockExecutor {
 
         maintainPrecompiledContractStorageRoots(track, activationConfig.forBlock(block.getNumber()));
 
-        int i = 1;
-        long totalGasUsed = 0;
-        Coin totalPaidFees = Coin.ZERO;
-        List<TransactionReceipt> receipts = new ArrayList<>();
-        List<Transaction> executedTransactions = new ArrayList<>();
-        Set<DataWord> deletedAccounts = new HashSet<>();
+        LongAccumulator totalGasUsed = new LongAccumulator(Long::sum, 0);
+        LongAccumulator totalPaidFees = new LongAccumulator(Long::sum, 0);
+        Map<Integer, TransactionReceipt> receipts = new ConcurrentSkipListMap<>();
+        Map<Integer, Transaction> executedTransactions = new ConcurrentSkipListMap<>();
+        Set<DataWord> deletedAccounts = ConcurrentHashMap.newKeySet();
 
-        int txindex = 0;
+        ExecutorService executorService = Executors.newFixedThreadPool(THREAD_COUNT);
 
-        for (Transaction tx : block.getTransactionsList()) {
-            logger.trace("apply block: [{}] tx: [{}] ", block.getNumber(), i);
-
-            TransactionExecutor txExecutor = transactionExecutorFactory.newInstance(
-                    tx,
-                    txindex++,
-                    block.getCoinbase(),
-                    track,
+        // execute parallel subsets of transactions
+        short start = 0;
+        for (short end : block.getHeader().getTxExecutionListEdges()) {
+            List<Transaction> sublist = block.getTransactionsList().subList(start, end);
+            TransactionListExecutor txListExecutor = new TransactionListExecutor(
+                    sublist,
                     block,
-                    totalGasUsed,
+                    transactionExecutorFactory,
+                    track,
                     vmTrace,
                     vmTraceOptions,
-                    deletedAccounts);
-            boolean transactionExecuted = txExecutor.executeTransaction();
+                    deletedAccounts,
+                    discardInvalidTxs,
+                    acceptInvalidTransactions,
+                    receipts,
+                    executedTransactions,
+                    transactionResults,
+                    registerProgramResults,
+                    programTraceProcessor,
+                    totalPaidFees,
+                    totalGasUsed,
+                    start);
 
-            if (!acceptInvalidTransactions && !transactionExecuted) {
-                if (discardInvalidTxs) {
-                    logger.warn("block: [{}] discarded tx: [{}]", block.getNumber(), tx.getHash());
-                    continue;
-                } else {
-                    logger.warn("block: [{}] execution interrupted because of invalid tx: [{}]",
-                                block.getNumber(), tx.getHash());
-                    profiler.stop(metric);
-                    return BlockResult.INTERRUPTED_EXECUTION_BLOCK_RESULT;
-                }
-            }
-
-            executedTransactions.add(tx);
-
-            if (this.registerProgramResults) {
-                this.transactionResults.put(tx.getHash(), txExecutor.getResult());
-            }
-
-            if (vmTrace) {
-                txExecutor.extractTrace(programTraceProcessor);
-            }
-
-            logger.trace("tx executed");
-
-            // No need to commit the changes here. track.commit();
-
-            logger.trace("track commit");
-
-            long gasUsed = txExecutor.getGasUsed();
-            totalGasUsed += gasUsed;
-            Coin paidFees = txExecutor.getPaidFees();
-            if (paidFees != null) {
-                totalPaidFees = totalPaidFees.add(paidFees);
-            }
-
-            deletedAccounts.addAll(txExecutor.getResult().getDeleteAccounts());
-
-            TransactionReceipt receipt = new TransactionReceipt();
-            receipt.setGasUsed(gasUsed);
-            receipt.setCumulativeGas(totalGasUsed);
-
-            receipt.setTxStatus(txExecutor.getReceipt().isSuccessful());
-            receipt.setTransaction(tx);
-            receipt.setLogInfoList(txExecutor.getVMLogs());
-            receipt.setStatus(txExecutor.getReceipt().getStatus());
-
-            logger.trace("block: [{}] executed tx: [{}]", block.getNumber(), tx.getHash());
-
-            logger.trace("tx[{}].receipt", i);
-
-            i++;
-
-            receipts.add(receipt);
-
-            logger.trace("tx done");
+            executorService.submit(txListExecutor);
+            start = end;
         }
+        executorService.shutdown();
+
+        try {
+            if (!executorService.awaitTermination(EXEC_TIMEOUT, TimeUnit.SECONDS)) {
+                logger.warn("block: [{}] execution timed out", block.getNumber());
+                profiler.stop(metric);
+                return BlockResult.INTERRUPTED_EXECUTION_BLOCK_RESULT;
+            }
+        } catch (InterruptedException e) {
+            logger.warn("block: [{}] execution was interrupted", block.getNumber());
+            profiler.stop(metric);
+            return BlockResult.INTERRUPTED_EXECUTION_BLOCK_RESULT;
+        }
+
+        // execute remaining transactions after the parallel subsets
+        List<Transaction> sublist = block.getTransactionsList().subList(start, block.getTransactionsList().size());
+        TransactionListExecutor txListExecutor = new TransactionListExecutor(
+                sublist,
+                block,
+                transactionExecutorFactory,
+                track,
+                vmTrace,
+                vmTraceOptions,
+                deletedAccounts,
+                discardInvalidTxs,
+                acceptInvalidTransactions,
+                receipts,
+                executedTransactions,
+                transactionResults,
+                registerProgramResults,
+                programTraceProcessor,
+                totalPaidFees,
+                totalGasUsed,
+                start);
+        txListExecutor.call();
 
         logger.trace("End txs executions.");
         if (!vmTrace) {
@@ -360,51 +391,15 @@ public class BlockExecutor {
         logger.trace("Building execution results.");
         BlockResult result = new BlockResult(
                 block,
-                executedTransactions,
-                receipts,
-                totalGasUsed,
-                totalPaidFees,
+                new LinkedList(executedTransactions.values()),
+                new LinkedList(receipts.values()),
+                totalGasUsed.longValue(),
+                Coin.valueOf(totalPaidFees.longValue()),
                 vmTrace ? null : track.getTrie()
         );
         profiler.stop(metric);
         logger.trace("End executeInternal.");
         return result;
-    }
-
-    /**
-     * Precompiled contracts storage is setup like any other contract for consistency. Here, we apply this logic on the
-     * exact activation block.
-     * This method is called automatically for every block except for the Genesis (which makes an explicit call).
-     */
-    public static void maintainPrecompiledContractStorageRoots(Repository track, ActivationConfig.ForBlock activations) {
-        if (activations.isActivating(RSKIP126)) {
-            for (RskAddress addr : PrecompiledContracts.GENESIS_ADDRESSES) {
-                if (!track.isExist(addr)) {
-                    track.createAccount(addr);
-                }
-                track.setupContract(addr);
-            }
-        }
-
-        for (Map.Entry<RskAddress, ConsensusRule> e : PrecompiledContracts.CONSENSUS_ENABLED_ADDRESSES.entrySet()) {
-            ConsensusRule contractActivationRule = e.getValue();
-            if (activations.isActivating(contractActivationRule)) {
-                RskAddress addr = e.getKey();
-                track.createAccount(addr);
-                track.setupContract(addr);
-            }
-        }
-    }
-
-    @VisibleForTesting
-    public static byte[] calculateLogsBloom(List<TransactionReceipt> receipts) {
-        Bloom logBloom = new Bloom();
-
-        for (TransactionReceipt receipt : receipts) {
-            logBloom.or(receipt.getBloomFilter());
-        }
-
-        return logBloom.getData();
     }
 
     public ProgramResult getProgramResult(Keccak256 txhash) {

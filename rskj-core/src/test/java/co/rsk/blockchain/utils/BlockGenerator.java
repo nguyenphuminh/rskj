@@ -32,8 +32,8 @@ import org.bouncycastle.pqc.math.linearalgebra.ByteUtils;
 import org.bouncycastle.util.encoders.Hex;
 import org.ethereum.config.Constants;
 import org.ethereum.config.blockchain.upgrades.ActivationConfig;
-import org.ethereum.config.blockchain.upgrades.ConsensusRule;
 import org.ethereum.config.blockchain.upgrades.ActivationConfigsForTest;
+import org.ethereum.config.blockchain.upgrades.ConsensusRule;
 import org.ethereum.core.*;
 import org.ethereum.crypto.HashUtil;
 import org.ethereum.util.ByteUtil;
@@ -45,7 +45,6 @@ import java.math.BigInteger;
 import java.util.*;
 
 import static org.ethereum.core.Genesis.getZeroHash;
-import static org.ethereum.crypto.HashUtil.EMPTY_TRIE_HASH;
 
 /**
  * Created by ajlopez on 5/10/2016.
@@ -73,16 +72,55 @@ public class BlockGenerator {
         this.blockFactory = new BlockFactory(activationConfig);
     }
 
+    private static byte[] nullReplace(byte[] e) {
+        if (e == null) {
+            return new byte[0];
+        }
+
+        return e;
+    }
+
+    private static byte[] removeLastElement(byte[] rlpEncoded) {
+        ArrayList<RLPElement> params = RLP.decode2(rlpEncoded);
+        RLPList block = (RLPList) params.get(0);
+        RLPList header = (RLPList) block.get(0);
+        if (header.size() < 20) {
+            return rlpEncoded;
+        }
+
+        // TODO Fix
+        //header.remove(header.size() - 1); // remove last element
+        //header.remove(header.size() - 1); // remove second last element
+
+        List<byte[]> newHeader = new ArrayList<>();
+        for (int i = 0; i < header.size(); i++) {
+            byte[] e = nullReplace(header.get(i).getRLPData());
+            if ((e.length > 32) && (i == 15))// fix bad feePaid
+                e = new byte[32];
+
+            newHeader.add(RLP.encodeElement(e));
+        }
+
+        byte[][] newHeaderElements = newHeader.toArray(new byte[newHeader.size()][]);
+        byte[] newEncodedHeader = RLP.encodeList(newHeaderElements);
+        return RLP.encodeList(
+                newEncodedHeader,
+                // If you request the .getRLPData() of a list you DO get the encoding prefix.
+                // very weird.
+                nullReplace(block.get(1).getRLPData()),
+                nullReplace(block.get(2).getRLPData()));
+    }
+
     public Genesis getGenesisBlock() {
-        return getNewGenesisBlock(3141592, Collections.emptyMap(), new byte[] { 2, 0, 0});
+        return getNewGenesisBlock(3141592, Collections.emptyMap(), new byte[]{2, 0, 0});
     }
 
     public Genesis getGenesisBlock(long gasLimit) {
-        return getNewGenesisBlock(gasLimit, Collections.emptyMap(), new byte[] { 2, 0, 0});
+        return getNewGenesisBlock(gasLimit, Collections.emptyMap(), new byte[]{2, 0, 0});
     }
 
     public Genesis getGenesisBlock(Map<RskAddress, AccountState> accounts) {
-        return getNewGenesisBlock(3141592, accounts, new byte[] {2, 0, 0});
+        return getNewGenesisBlock(3141592, accounts, new byte[]{2, 0, 0});
     }
 
     private Genesis getNewGenesisBlock(long initialGasLimit, Map<RskAddress, AccountState> accounts, byte[] difficulty) {
@@ -93,14 +131,14 @@ public class BlockGenerator {
         ecKey = new ECKey(rand);
         address = ecKey.getAddress();
         */
-        byte[] coinbase    = Hex.decode("e94aef644e428941ee0a3741f28d80255fddba7f");
+        byte[] coinbase = Hex.decode("e94aef644e428941ee0a3741f28d80255fddba7f");
 
-        long   timestamp         = 0; // predictable timeStamp
+        long timestamp = 0; // predictable timeStamp
 
-        byte[] parentHash  = Keccak256.ZERO_HASH.getBytes();
-        byte[] extraData   = EMPTY_BYTE_ARRAY;
+        byte[] parentHash = Keccak256.ZERO_HASH.getBytes();
+        byte[] extraData = EMPTY_BYTE_ARRAY;
 
-        long   gasLimit         = initialGasLimit;
+        long gasLimit = initialGasLimit;
 
         boolean isRskip126Enabled = activationConfig.isActive(ConsensusRule.RSKIP126, 0);
         boolean useRskip92Encoding = activationConfig.isActive(ConsensusRule.RSKIP92, 0);
@@ -111,7 +149,7 @@ public class BlockGenerator {
                 getZeroHash(),
                 difficulty,
                 0,
-                        ByteUtil.longToBytes(gasLimit),
+                ByteUtil.longToBytes(gasLimit),
                 0,
                 timestamp,
                 extraData,
@@ -134,8 +172,7 @@ public class BlockGenerator {
                 if (blockCache[k] == null) {
                     if (k == 0) {
                         blockCache[0] = this.getGenesisBlock();
-                    }
-                    else {
+                    } else {
                         blockCache[k] = this.createChildBlock(blockCache[k - 1]);
                     }
                 }
@@ -156,6 +193,10 @@ public class BlockGenerator {
 
         byte[] ummRoot = activationConfig.isActive(ConsensusRule.RSKIPUMM, blockNumber) ? new byte[0] : null;
 
+        short[] parentEdges = parent.getHeader().getTxExecutionListEdges();
+        short[] edges = new short[parentEdges.length];
+        System.arraycopy(parentEdges, 0, edges, 0, parentEdges.length);
+
         BlockHeader newHeader = blockFactory.getBlockHeaderBuilder()
                 .setParentHashFromKeccak256(parent.getHash())
                 .setUnclesHash(unclesListHash).setCoinbase(parent.getCoinbase())
@@ -163,14 +204,15 @@ public class BlockGenerator {
                 .setEmptyLogsBloom()
                 .setEmptyReceiptTrieRoot()
                 .setDifficultyFromBytes(difficulty)
-                .setNumber(parent.getNumber()+1)
+                .setNumber(parent.getNumber() + 1)
                 .setGasLimit(parent.getGasLimit())
-                .setGasUsed( parent.getGasUsed()) // why ? I just copied the value before
+                .setGasUsed(parent.getGasUsed()) // why ? I just copied the value before
                 .setTimestamp(parent.getTimestamp() + ++count)
                 .setPaidFees(Coin.valueOf(fees))
                 .setEmptyMergedMiningForkDetectionData()
                 .setUncleCount(uncles.size())
                 .setUmmRoot(ummRoot)
+                .setTxExecutionListEdges(edges)
                 .build();
 
         return blockFactory.newBlock(
@@ -193,6 +235,10 @@ public class BlockGenerator {
 
         byte[] ummRoot = activationConfig.isActive(ConsensusRule.RSKIPUMM, blockNumber) ? new byte[0] : null;
 
+        short[] parentEdges = parent.getHeader().getTxExecutionListEdges();
+        short[] edges = new short[parentEdges.length];
+        System.arraycopy(parentEdges, 0, edges, 0, parentEdges.length);
+
         BlockHeader newHeader = blockFactory.getBlockHeaderBuilder()
                 .setParentHashFromKeccak256(parent.getHash())
                 .setTxTrieRoot(BlockHashesHelper.getTxTrieRoot(txs, isRskip126Enabled))
@@ -201,12 +247,13 @@ public class BlockGenerator {
                 .setEmptyLogsBloom()
                 .setEmptyReceiptTrieRoot()
                 .setDifficulty(parent.getDifficulty())
-                .setNumber(parent.getNumber()+1)
+                .setNumber(parent.getNumber() + 1)
                 .setGasLimit(parent.getGasLimit())
-                .setGasUsed( parent.getGasUsed()) // why ? I just copied the value before
+                .setGasUsed(parent.getGasUsed()) // why ? I just copied the value before
                 .setTimestamp(parent.getTimestamp() + ++count)
                 .setEmptyMergedMiningForkDetectionData()
                 .setUmmRoot(ummRoot)
+                .setTxExecutionListEdges(edges)
                 .build();
 
         return blockFactory.newBlock(
@@ -230,21 +277,16 @@ public class BlockGenerator {
 
         List<BlockHeader> uncles = new ArrayList<>();
 
-        return createChildBlock(parent, txs, uncles, difficulty, null);
-    }
-
-    public Block createChildBlock(Block parent, List<Transaction> txs) {
-        return createChildBlock(parent, txs, new ArrayList<>(), parent.getDifficulty().asBigInteger().longValue(), null);
+        return createChildBlock(parent, txs, uncles, difficulty, null, new short[0]);
     }
 
     public Block createChildBlock(Block parent, List<Transaction> txs, List<BlockHeader> uncles,
-                                  long difficulty, BigInteger minGasPrice) {
-        return createChildBlock(parent, txs, uncles, difficulty, minGasPrice, parent.getGasLimit());
+                                  long difficulty, BigInteger minGasPrice, short[] txExecutionListEdges) {
+        return createChildBlock(parent, txs, uncles, difficulty, minGasPrice, txExecutionListEdges, parent.getGasLimit());
     }
 
-
     public Block createChildBlock(Block parent, List<Transaction> txs, List<BlockHeader> uncles,
-                                  long difficulty, BigInteger minGasPrice, byte[] gasLimit, RskAddress coinbase) {
+                                  long difficulty, BigInteger minGasPrice, byte[] gasLimit, short[] txExecutionListEdges, RskAddress coinbase) {
         if (txs == null) {
             txs = new ArrayList<>();
         }
@@ -270,7 +312,7 @@ public class BlockGenerator {
                 .setCoinbase(coinbase)
                 .setLogsBloom(ByteUtils.clone(new Bloom().getData()))
                 .setDifficulty(BlockDifficulty.ONE)
-                .setNumber(parent.getNumber()+1)
+                .setNumber(parent.getNumber() + 1)
                 .setGasLimit(gasLimit)
                 .setGasUsed(0)
                 .setTimestamp(parent.getTimestamp() + ++count)
@@ -278,12 +320,12 @@ public class BlockGenerator {
                 .setMinimumGasPrice(coinMinGasPrice)
                 .setUncleCount(uncles.size())
                 .setUmmRoot(ummRoot)
+                .setTxExecutionListEdges(txExecutionListEdges)
                 .build();
 
         if (difficulty == 0) {
             newHeader.setDifficulty(difficultyCalculator.calcDifficulty(newHeader, parent.getHeader()));
-        }
-        else {
+        } else {
             newHeader.setDifficulty(new BlockDifficulty(BigInteger.valueOf(difficulty)));
         }
 
@@ -296,15 +338,15 @@ public class BlockGenerator {
     }
 
     public Block createChildBlock(Block parent, List<Transaction> txs, List<BlockHeader> uncles,
-                                  long difficulty, BigInteger minGasPrice, byte[] gasLimit) {
-        return createChildBlock(parent, txs, uncles, difficulty, minGasPrice, gasLimit, parent.getCoinbase());
+                                  long difficulty, BigInteger minGasPrice, short[] txExecutionListEdges, byte[] gasLimit) {
+        return createChildBlock(parent, txs, uncles, difficulty, minGasPrice, gasLimit, txExecutionListEdges, parent.getCoinbase());
     }
 
     public Block createBlock(int number, int ntxs) {
         return createBlock(number, ntxs, null);
     }
 
-    public Block createBlock(int number, int ntxs, Long gasLimit){
+    public Block createBlock(int number, int ntxs, Long gasLimit) {
         Block parent = gasLimit == null ? getGenesisBlock() : getGenesisBlock(gasLimit);
 
         List<Transaction> txs = new ArrayList<>();
@@ -330,11 +372,12 @@ public class BlockGenerator {
                 .setDifficulty(parent.getDifficulty())
                 .setNumber(number)
                 .setGasLimit(parent.getGasLimit())
-                .setGasUsed( parent.getGasUsed()) // why ? I just copied the value before
+                .setGasUsed(parent.getGasUsed()) // why ? I just copied the value before
                 .setTimestamp(parent.getTimestamp() + ++count)
                 .setEmptyMergedMiningForkDetectionData()
                 .setMinimumGasPrice(minimumGasPrice)
                 .setUmmRoot(ummRoot)
+                .setTxExecutionListEdges(new short[0])
                 .build();
 
         return blockFactory.newBlock(
@@ -367,11 +410,12 @@ public class BlockGenerator {
                 .setDifficulty(parent.getDifficulty())
                 .setNumber(parent.getNumber() + 1)
                 .setGasLimit(parent.getGasLimit())
-                .setGasUsed( parent.getGasUsed()) // why ? I just copied the value before
+                .setGasUsed(parent.getGasUsed()) // why ? I just copied the value before
                 .setTimestamp(parent.getTimestamp() + ++count)
                 .setEmptyMergedMiningForkDetectionData()
                 .setMinimumGasPrice(Coin.valueOf(10))
                 .setUmmRoot(ummRoot)
+                .setTxExecutionListEdges(new short[0])
                 .build();
 
         return blockFactory.newBlock(
@@ -386,7 +430,7 @@ public class BlockGenerator {
     }
 
     public List<Block> getBlockChain(Block parent, int size, long difficulty) {
-        return getBlockChain(parent, size,0,false, difficulty);
+        return getBlockChain(parent, size, 0, false, difficulty);
     }
 
     public List<Block> getBlockChain(Block parent, int size) {
@@ -432,7 +476,7 @@ public class BlockGenerator {
             Block newblock = createChildBlock(
                     parent, txs, uncles,
                     difficulty,
-                    BigInteger.valueOf(1));
+                    BigInteger.valueOf(1), new short[0]);
 
             if (withMining) {
                 newblock = new BlockMiner(activationConfig).mineBlock(newblock);
@@ -478,45 +522,6 @@ public class BlockGenerator {
             accounts.put(new RskAddress(accountEntry.getKey()), acctState);
         }
 
-        return getNewGenesisBlock(initialGasLimit, accounts, new byte[] { 0 });
-    }
-
-    private static byte[] nullReplace(byte[] e) {
-        if (e == null) {
-            return new byte[0];
-        }
-
-        return e;
-    }
-
-    private static byte[] removeLastElement(byte[] rlpEncoded) {
-        ArrayList<RLPElement> params = RLP.decode2(rlpEncoded);
-        RLPList block = (RLPList) params.get(0);
-        RLPList header = (RLPList) block.get(0);
-        if (header.size() < 20) {
-            return rlpEncoded;
-        }
-
-        // TODO Fix
-        //header.remove(header.size() - 1); // remove last element
-        //header.remove(header.size() - 1); // remove second last element
-
-        List<byte[]> newHeader = new ArrayList<>();
-        for (int i = 0; i < header.size(); i++) {
-            byte[] e = nullReplace(header.get(i).getRLPData());
-            if ((e.length > 32) && (i == 15))// fix bad feePaid
-                e = new byte[32];
-
-            newHeader.add(RLP.encodeElement(e));
-        }
-
-        byte[][] newHeaderElements = newHeader.toArray(new byte[newHeader.size()][]);
-        byte[] newEncodedHeader = RLP.encodeList(newHeaderElements);
-        return RLP.encodeList(
-                newEncodedHeader,
-                // If you request the .getRLPData() of a list you DO get the encoding prefix.
-                // very weird.
-                nullReplace(block.get(1).getRLPData()),
-                nullReplace(block.get(2).getRLPData()));
+        return getNewGenesisBlock(initialGasLimit, accounts, new byte[]{0});
     }
 }

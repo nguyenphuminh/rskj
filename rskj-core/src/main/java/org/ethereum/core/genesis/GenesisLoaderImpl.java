@@ -41,6 +41,8 @@ import org.ethereum.vm.DataWord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigInteger;
@@ -76,12 +78,12 @@ public class GenesisLoaderImpl implements GenesisLoader {
             BigInteger initialNonce,
             boolean isRsk,
             boolean useRskip92Encoding,
-            boolean isRskip126Enabled) {
+            boolean isRskip126Enabled) throws FileNotFoundException {
         this(
                 activationConfig,
                 stateRootHandler,
                 trieStore,
-                GenesisLoaderImpl.class.getResourceAsStream("/genesis/" + genesisFile),
+                new FileInputStream("./genesis/" + genesisFile),
                 initialNonce,
                 isRsk,
                 useRskip92Encoding,

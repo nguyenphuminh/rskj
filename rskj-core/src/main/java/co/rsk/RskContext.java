@@ -1284,16 +1284,20 @@ public class RskContext implements NodeContext, NodeBootstrapper {
 
         RskSystemProperties systemProperties = getRskSystemProperties();
         ActivationConfig.ForBlock genesisActivations = systemProperties.getActivationConfig().forBlock(0L);
-        return new GenesisLoaderImpl(
-                systemProperties.getActivationConfig(),
-                getStateRootHandler(),
-                getTrieStore(),
-                systemProperties.genesisInfo(),
-                systemProperties.getNetworkConstants().getInitialNonce(),
-                true,
-                genesisActivations.isActive(ConsensusRule.RSKIP92),
-                genesisActivations.isActive(ConsensusRule.RSKIP126)
-        );
+        try {
+            return new GenesisLoaderImpl(
+                    systemProperties.getActivationConfig(),
+                    getStateRootHandler(),
+                    getTrieStore(),
+                    systemProperties.genesisInfo(),
+                    systemProperties.getNetworkConstants().getInitialNonce(),
+                    true,
+                    genesisActivations.isActive(ConsensusRule.RSKIP92),
+                    genesisActivations.isActive(ConsensusRule.RSKIP126)
+            );
+        } catch (FileNotFoundException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     protected synchronized TrieStore buildTrieStore(Path trieStorePath) {

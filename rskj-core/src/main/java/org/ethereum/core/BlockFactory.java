@@ -31,6 +31,8 @@ import org.ethereum.util.RLPElement;
 import org.ethereum.util.RLPList;
 
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -38,8 +40,8 @@ import java.util.List;
 import static org.ethereum.crypto.HashUtil.EMPTY_TRIE_HASH;
 
 public class BlockFactory {
-    private static final int RLP_HEADER_SIZE = 17;
-    private static final int RLP_HEADER_SIZE_WITH_MERGED_MINING = 20;
+    private static final int RLP_HEADER_SIZE = 18;
+    private static final int RLP_HEADER_SIZE_WITH_MERGED_MINING = 21;
 
     private final ActivationConfig activationConfig;
 
@@ -165,10 +167,18 @@ public class BlockFactory {
         byte[] bitcoinMergedMiningHeader = null;
         byte[] bitcoinMergedMiningMerkleProof = null;
         byte[] bitcoinMergedMiningCoinbaseTransaction = null;
-        if (rlpHeader.size() > r) {
+        if (rlpHeader.size() > r + 1) {
             bitcoinMergedMiningHeader = rlpHeader.get(r++).getRLPData();
             bitcoinMergedMiningMerkleProof = rlpHeader.get(r++).getRLPRawData();
             bitcoinMergedMiningCoinbaseTransaction = rlpHeader.get(r++).getRLPData();
+        }
+
+        // TODO: might need to add an RSKIP check
+        byte[] edgesBytes = rlpHeader.get(r++).getRLPData();
+        short[] txExecutionListEdges = new short[0];
+        if (edgesBytes != null) {
+            txExecutionListEdges = new short[edgesBytes.length / 2];
+            ByteBuffer.wrap(edgesBytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(txExecutionListEdges);
         }
 
         boolean useRskip92Encoding = activationConfig.isActive(ConsensusRule.RSKIP92, blockNumber);
@@ -202,7 +212,7 @@ public class BlockFactory {
                 paidFees, bitcoinMergedMiningHeader, bitcoinMergedMiningMerkleProof,
                 bitcoinMergedMiningCoinbaseTransaction, new byte[0],
                 minimumGasPrice, uncleCount, sealed, useRskip92Encoding, includeForkDetectionData,
-                ummRoot
+                ummRoot, txExecutionListEdges
         );
     }
 

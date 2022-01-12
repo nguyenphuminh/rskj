@@ -32,6 +32,8 @@ import org.ethereum.util.Utils;
 
 import javax.annotation.Nullable;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.List;
 
@@ -103,6 +105,9 @@ public class BlockHeader {
 
     private byte[] miningForkDetectionData;
 
+    /* Edges of the transaction execution lists */
+    private short[] txExecutionListEdges;
+
     private final byte[] ummRoot;
 
     /**
@@ -129,7 +134,8 @@ public class BlockHeader {
                        Coin paidFees, byte[] bitcoinMergedMiningHeader, byte[] bitcoinMergedMiningMerkleProof,
                        byte[] bitcoinMergedMiningCoinbaseTransaction, byte[] mergedMiningForkDetectionData,
                        Coin minimumGasPrice, int uncleCount, boolean sealed,
-                       boolean useRskip92Encoding, boolean includeForkDetectionData, byte[] ummRoot) {
+                       boolean useRskip92Encoding, boolean includeForkDetectionData, byte[] ummRoot,
+                       short[] txExecutionListEdges) {
         this.parentHash = parentHash;
         this.unclesHash = unclesHash;
         this.coinbase = coinbase;
@@ -155,6 +161,7 @@ public class BlockHeader {
         this.useRskip92Encoding = useRskip92Encoding;
         this.includeForkDetectionData = includeForkDetectionData;
         this.ummRoot = ummRoot != null ? Arrays.copyOf(ummRoot, ummRoot.length) : null;
+        this.txExecutionListEdges = txExecutionListEdges;
     }
 
     @VisibleForTesting
@@ -297,6 +304,10 @@ public class BlockHeader {
         return extraData;
     }
 
+    public short[] getTxExecutionListEdges() { return this.txExecutionListEdges; }
+
+    public void setTxExecutionListEdges(short[] edges) { this.txExecutionListEdges = edges; }
+
     public void setLogsBloom(byte[] logsBloom) {
         /* A sealed block header is immutable, cannot be changed */
         if (this.sealed) {
@@ -381,6 +392,10 @@ public class BlockHeader {
                 fieldToEncodeList.add(bitcoinMergedMiningCoinbaseTransaction);
             }
         }
+        byte[] edgesBytes = new byte[this.txExecutionListEdges.length * 2];
+        ByteBuffer.wrap(edgesBytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().put(this.txExecutionListEdges);
+        byte[] rlpEdges = RLP.encodeElement(edgesBytes);
+        fieldToEncodeList.add(rlpEdges);
 
         return RLP.encodeList(fieldToEncodeList.toArray(new byte[][]{}));
     }

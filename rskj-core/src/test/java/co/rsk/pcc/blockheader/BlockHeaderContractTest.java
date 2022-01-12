@@ -36,7 +36,6 @@ import co.rsk.test.World;
 import co.rsk.test.builders.BlockChainBuilder;
 import co.rsk.util.DifficultyUtils;
 import org.bouncycastle.util.Arrays;
-import org.bouncycastle.util.BigIntegers;
 import org.bouncycastle.util.encoders.Hex;
 import org.ethereum.config.Constants;
 import org.ethereum.config.blockchain.upgrades.ActivationConfig;
@@ -471,8 +470,8 @@ public class BlockHeaderContractTest {
 
         Block childBlock = blockGenerator.createChildBlock(
                 parent, new ArrayList<>(), new ArrayList<>(), parent.getDifficulty().asBigInteger().longValue(),
-                MIN_GAS_PRICE, parent.getGasLimit(), coinbase
-        );
+                MIN_GAS_PRICE, parent.getGasLimit(), ,
+                coinbase);
 
         Block newBlock = blockFactory.cloneBlockForModification(childBlock);
 
