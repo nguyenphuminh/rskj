@@ -264,7 +264,7 @@ public class BlockHeaderBuilderTest {
                 .build();
 
         RLPList rlpList = RLP.decodeList(header.getEncoded());
-        assertEquals(18, rlpList.size());
+        assertEquals(19, rlpList.size());
     }
 
     @Test
@@ -282,7 +282,7 @@ public class BlockHeaderBuilderTest {
                 .build();
 
         RLPList rlpList = RLP.decodeList(header.getEncoded());
-        assertEquals(20, rlpList.size());
+        assertEquals(21, rlpList.size());
     }
 
     @Test
@@ -301,7 +301,7 @@ public class BlockHeaderBuilderTest {
 
         // the useRskip92Field should be true, hence the merkle proof and coinbase are not included
         RLPList rlpList = RLP.decodeList(header.getEncoded());
-        assertEquals(18, rlpList.size());
+        assertEquals(19, rlpList.size());
     }
 
     @Test

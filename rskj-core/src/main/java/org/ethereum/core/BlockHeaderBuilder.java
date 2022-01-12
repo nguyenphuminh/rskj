@@ -57,6 +57,7 @@ public class BlockHeaderBuilder {
     private byte[] bitcoinMergedMiningCoinbaseTransaction;
     private byte[] mergedMiningForkDetectionData;
     private byte[] ummRoot;
+    private short[] txExecutionListEdges;
 
     private Coin minimumGasPrice;
     private int uncleCount;
@@ -68,11 +69,13 @@ public class BlockHeaderBuilder {
 
     private boolean createConsensusCompliantHeader;
     private boolean createUmmCompliantHeader;
+    private boolean createParallelCompliantHeader;
 
     public BlockHeaderBuilder(ActivationConfig activationConfig) {
         this.activationConfig = activationConfig;
         createConsensusCompliantHeader = true;
         createUmmCompliantHeader = true;
+        createParallelCompliantHeader = true;
     }
 
     public BlockHeaderBuilder setCreateConsensusCompliantHeader(boolean createConsensusCompliantHeader) {
@@ -82,6 +85,11 @@ public class BlockHeaderBuilder {
 
     public BlockHeaderBuilder setCreateUmmCompliantHeader(boolean createUmmCompliantHeader) {
         this.createUmmCompliantHeader = createUmmCompliantHeader;
+        return this;
+    }
+
+    public BlockHeaderBuilder setCreateParallelCompliantHeader(boolean createParallelCompliantHeader) {
+        this.createParallelCompliantHeader = createParallelCompliantHeader;
         return this;
     }
 
@@ -252,6 +260,18 @@ public class BlockHeaderBuilder {
         return this;
     }
 
+    public BlockHeaderBuilder setTxExecutionListEdges(short[] edges) {
+        if (edges != null) {
+            this.txExecutionListEdges = new short[edges.length];
+            System.arraycopy(edges, 0, this.txExecutionListEdges, 0, edges.length);
+            this.createParallelCompliantHeader = true;
+        } else {
+            this.txExecutionListEdges = null;
+            this.createParallelCompliantHeader = false;
+        }
+        return this;
+    }
+
     private void initializeWithDefaultValues() {
         extraData = normalizeValue(extraData, new byte[0]);
         bitcoinMergedMiningHeader = normalizeValue(bitcoinMergedMiningHeader, new byte[0]);
@@ -309,6 +329,12 @@ public class BlockHeaderBuilder {
             }
         }
 
+        if (createParallelCompliantHeader) {
+            if (txExecutionListEdges == null) {
+                txExecutionListEdges = new short[0];
+            }
+        }
+
         return new BlockHeader(
                 parentHash, unclesHash, coinbase,
                 stateRoot, txTrieRoot, receiptTrieRoot,
@@ -320,7 +346,7 @@ public class BlockHeaderBuilder {
                 mergedMiningForkDetectionData,
                 minimumGasPrice, uncleCount,
                 false, useRskip92Encoding,
-                includeForkDetectionData, ummRoot
+                includeForkDetectionData, ummRoot, txExecutionListEdges
         );
     }
 }

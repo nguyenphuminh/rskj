@@ -388,7 +388,8 @@ public class BlockHeaderTest {
                 sealed,
                 useRskip92Encoding,
                 includeForkDetectionData,
-                ummRoot);
+                ummRoot,
+                new short[0]);
     }
 
     private byte[] concatenate(byte[] left, byte[] right) {
