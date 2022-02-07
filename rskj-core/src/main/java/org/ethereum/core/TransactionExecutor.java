@@ -145,6 +145,23 @@ public class TransactionExecutor {
     }
 
     /**
+     * Validates, executes the transaction and creates the buckets for multi-threading.
+     *
+     * @return true if the transaction is valid and executed, false if the transaction is invalid
+     */
+    public boolean executeTransactionSequentially() {
+        if (!this.init()) {
+            return false;
+        }
+
+        this.execute();
+        this.go();
+        this.finalization();
+
+        return true;
+    }
+
+    /**
      * Do all the basic validation, if the executor
      * will be ready to run the transaction at the end
      * set readyToExecute = true
