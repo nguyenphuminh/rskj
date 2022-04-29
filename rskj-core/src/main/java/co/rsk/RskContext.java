@@ -1080,7 +1080,7 @@ public class RskContext implements NodeContext, NodeBootstrapper {
         DB indexDB = DBMaker.fileDB(dbFile)
                 .make();
 
-        KeyValueDataSource blocksDB = RocksDbDataSource.makeDataSource(Paths.get(databaseDir, "blocks"));
+        KeyValueDataSource blocksDB = KeyValueDataSource.makeDataSource(Paths.get(databaseDir, "blocks"), getRskSystemProperties().databaseKind());
 
         return new IndexedBlockStore(getBlockFactory(), blocksDB, new MapDBBlocksIndex(indexDB));
     }
@@ -1257,8 +1257,9 @@ public class RskContext implements NodeContext, NodeBootstrapper {
     protected synchronized ReceiptStore buildReceiptStore() {
         checkIfNotClosed();
 
-        int receiptsCacheSize = getRskSystemProperties().getReceiptsCacheSize();
-        KeyValueDataSource ds = RocksDbDataSource.makeDataSource(Paths.get(getRskSystemProperties().databaseDir(), "receipts"));
+        RskSystemProperties rskSystemProperties = getRskSystemProperties();
+        int receiptsCacheSize = rskSystemProperties.getReceiptsCacheSize();
+        KeyValueDataSource ds = KeyValueDataSource.makeDataSource(Paths.get(rskSystemProperties.databaseDir(), "receipts"), rskSystemProperties.databaseKind());
 
         if (receiptsCacheSize != 0) {
             ds = new DataSourceWithCache(ds, receiptsCacheSize);
@@ -1297,11 +1298,12 @@ public class RskContext implements NodeContext, NodeBootstrapper {
     protected synchronized TrieStore buildTrieStore(Path trieStorePath) {
         checkIfNotClosed();
 
-        int statesCacheSize = getRskSystemProperties().getStatesCacheSize();
-        KeyValueDataSource ds = RocksDbDataSource.makeDataSource(trieStorePath);
+        RskSystemProperties rskSystemProperties = getRskSystemProperties();
+        int statesCacheSize = rskSystemProperties.getStatesCacheSize();
+        KeyValueDataSource ds = KeyValueDataSource.makeDataSource(trieStorePath, rskSystemProperties.databaseKind());
 
         if (statesCacheSize != 0) {
-            CacheSnapshotHandler cacheSnapshotHandler = getRskSystemProperties().shouldPersistStatesCacheSnapshot()
+            CacheSnapshotHandler cacheSnapshotHandler = rskSystemProperties.shouldPersistStatesCacheSnapshot()
                     ? new CacheSnapshotHandler(resolveCacheSnapshotPath(trieStorePath))
                     : null;
             ds = new DataSourceWithCache(ds, statesCacheSize, cacheSnapshotHandler);
@@ -1325,8 +1327,9 @@ public class RskContext implements NodeContext, NodeBootstrapper {
     protected StateRootsStore buildStateRootsStore() {
         checkIfNotClosed();
 
-        int stateRootsCacheSize = getRskSystemProperties().getStateRootsCacheSize();
-        KeyValueDataSource stateRootsDB = RocksDbDataSource.makeDataSource(Paths.get(getRskSystemProperties().databaseDir(), "stateRoots"));
+        RskSystemProperties rskSystemProperties = getRskSystemProperties();
+        int stateRootsCacheSize = rskSystemProperties.getStateRootsCacheSize();
+        KeyValueDataSource stateRootsDB = KeyValueDataSource.makeDataSource(Paths.get(rskSystemProperties.databaseDir(), "stateRoots"), rskSystemProperties.databaseKind());
 
         if (stateRootsCacheSize > 0) {
             stateRootsDB = new DataSourceWithCache(stateRootsDB, stateRootsCacheSize);
@@ -1377,7 +1380,8 @@ public class RskContext implements NodeContext, NodeBootstrapper {
             return null;
         }
 
-        KeyValueDataSource ds = RocksDbDataSource.makeDataSource(Paths.get(rskSystemProperties.databaseDir(), "wallet"));
+        KeyValueDataSource ds = KeyValueDataSource.makeDataSource(Paths.get(rskSystemProperties.databaseDir(), "wallet"), rskSystemProperties.databaseKind());
+
         return new Wallet(ds);
     }
 
@@ -1405,7 +1409,8 @@ public class RskContext implements NodeContext, NodeBootstrapper {
 
     private TrieStore buildAbstractTrieStore(Path databasePath) {
         TrieStore newTrieStore;
-        GarbageCollectorConfig gcConfig = getRskSystemProperties().garbageCollectorConfig();
+        RskSystemProperties rskSystemProperties = getRskSystemProperties();
+        GarbageCollectorConfig gcConfig = rskSystemProperties.garbageCollectorConfig();
         final String multiTrieStoreNamePrefix = "unitrie_";
         if (gcConfig.enabled()) {
             try {
@@ -1422,7 +1427,7 @@ public class RskContext implements NodeContext, NodeBootstrapper {
 
                 boolean gcWasEnabled = !multiTrieStorePaths.isEmpty();
                 if (gcWasEnabled) {
-                    RocksDbDataSource.mergeDataSources(trieStorePath, multiTrieStorePaths);
+                    KeyValueDataSource.mergeDataSources(trieStorePath, multiTrieStorePaths, rskSystemProperties.databaseKind());
                     // cleanup MultiTrieStore data sources
                     multiTrieStorePaths.stream()
                             .map(Path::toString)
