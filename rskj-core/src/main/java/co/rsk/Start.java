@@ -17,7 +17,6 @@
  */
 package co.rsk;
 
-import co.rsk.rpc.netty.HttpServer;
 import co.rsk.util.PreflightChecksUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,10 +56,6 @@ public class Start {
         runtime.addShutdownHook(new Thread(ctx::close, "stopper"));
 
         runner.run();
-
-        // TODO, WIP -> Add to context and remove from here (For testing purposes only)
-        HttpServer httpServer = new HttpServer();
-        httpServer.start();
     }
 
     static void setUpThread(@Nonnull Thread thread) {
