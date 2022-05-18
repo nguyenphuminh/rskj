@@ -17,6 +17,8 @@
  */
 package co.rsk.rpc.netty.http;
 
+import co.rsk.config.InternalService;
+import co.rsk.rpc.netty.http.dto.ModuleConfigDTO;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.EventLoopGroup;
@@ -25,10 +27,20 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class HttpServer {
-
+public class HttpServer implements InternalService {
     private static final Logger logger = LoggerFactory.getLogger(HttpServer.class);
 
+    private int inetPort;
+    private ModuleConfigDTO moduleConfigDTO;
+
+    private HttpServer() { }
+
+    public HttpServer(int inetPort, ModuleConfigDTO moduleConfigDTO) {
+        this.inetPort = inetPort;
+        this.moduleConfigDTO = moduleConfigDTO;
+    }
+
+    @Override
     public void start() {
 
         EventLoopGroup bossGroup = new NioEventLoopGroup();
@@ -39,11 +51,11 @@ public class HttpServer {
             ServerBootstrap serverBootstrap = new ServerBootstrap();
             serverBootstrap.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
-                    .childHandler(new HttpServerInitializer());
+                    .childHandler(new HttpServerInitializer(moduleConfigDTO));
 
             logger.info("HTTP Server Ready");
 
-            ChannelFuture channelFuture = serverBootstrap.bind(8080).sync();
+            ChannelFuture channelFuture = serverBootstrap.bind(inetPort).sync();
             channelFuture.channel().closeFuture().sync();
 
         } catch (InterruptedException e) {
@@ -53,6 +65,11 @@ public class HttpServer {
             workerGroup.shutdownGracefully();
         }
 
+    }
+
+    @Override
+    public void stop() {
+        // TODO
     }
 
 }

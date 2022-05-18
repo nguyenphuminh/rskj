@@ -17,6 +17,7 @@
  */
 package co.rsk.rpc.netty.http;
 
+import co.rsk.rpc.netty.http.dto.ModuleConfigDTO;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.*;
@@ -26,7 +27,13 @@ import org.slf4j.LoggerFactory;
 public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
     private static final Logger logger = LoggerFactory.getLogger(HttpServerHandler.class);
 
-    private static final HttpServerDispatcher dispatcher = new HttpServerDispatcher();
+    private HttpServerDispatcher dispatcher;
+
+    private HttpServerHandler() { }
+
+    public HttpServerHandler(ModuleConfigDTO moduleConfigDTO) {
+        this.dispatcher = new HttpServerDispatcher(moduleConfigDTO);
+    }
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, HttpObject msg) throws Exception {

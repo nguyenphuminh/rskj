@@ -76,6 +76,8 @@ import co.rsk.rpc.modules.trace.TraceModuleImpl;
 import co.rsk.rpc.modules.txpool.TxPoolModule;
 import co.rsk.rpc.modules.txpool.TxPoolModuleImpl;
 import co.rsk.rpc.netty.*;
+import co.rsk.rpc.netty.http.HttpServer;
+import co.rsk.rpc.netty.http.dto.ModuleConfigDTO;
 import co.rsk.scoring.PeerScoring;
 import co.rsk.scoring.PeerScoringManager;
 import co.rsk.scoring.PeerScoringReporterService;
@@ -247,6 +249,7 @@ public class RskContext implements NodeContext, NodeBootstrapper {
     private ReceivedTxSignatureCache receivedTxSignatureCache;
     private BlockTxSignatureCache blockTxSignatureCache;
     private PeerScoringReporterService peerScoringReporterService;
+    private HttpServer httpServer;
 
     private volatile boolean closed;
 
@@ -963,6 +966,10 @@ public class RskContext implements NodeContext, NodeBootstrapper {
             internalServices.add(getPeerScoringReporterService());
         }
 
+        if (getRskSystemProperties().isHttpServerEnabled()) {
+            internalServices.add(getHttpServer());
+        }
+
         internalServices.add(new BlockChainFlusher(
                 getRskSystemProperties().flushNumberOfBlocks(),
                 getCompositeEthereumListener(),
@@ -1095,6 +1102,16 @@ public class RskContext implements NodeContext, NodeBootstrapper {
         }
 
         return peerScoringReporterService;
+    }
+
+    public synchronized HttpServer getHttpServer() {
+        checkIfNotClosed();
+
+        if (httpServer == null) {
+            this.httpServer = buildHttpServer();
+        }
+
+        return httpServer;
     }
 
     public boolean isClosed() {
@@ -1381,6 +1398,13 @@ public class RskContext implements NodeContext, NodeBootstrapper {
 
         KeyValueDataSource ds = LevelDbDataSource.makeDataSource(Paths.get(rskSystemProperties.databaseDir(), "wallet"));
         return new Wallet(ds);
+    }
+
+    @Nullable
+    protected synchronized HttpServer buildHttpServer() {
+        RskSystemProperties config = getRskSystemProperties();
+        ModuleConfigDTO moduleConfigDTO = new ModuleConfigDTO(config.isHealthCheckModuleEnabled());
+        return new HttpServer(config.getHttpServerPort(), moduleConfigDTO);
     }
 
     /***** Private Methods ********************************************************************************************/

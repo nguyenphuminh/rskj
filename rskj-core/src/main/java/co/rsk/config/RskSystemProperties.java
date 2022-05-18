@@ -138,6 +138,18 @@ public class RskSystemProperties extends SystemProperties {
         return configFromFiles.getBoolean("miner.server.isFixedClock");
     }
 
+    public boolean isHttpServerEnabled() {
+        return configFromFiles.getBoolean("http.server.enabled");
+    }
+
+    public int getHttpServerPort() {
+        return configFromFiles.getInt("http.server.port");
+    }
+
+    public boolean isHealthCheckModuleEnabled() {
+        return configFromFiles.getBoolean("http.server.modules.health-check.enabled");
+    }
+
     public long workSubmissionRateLimitInMills() {
         return configFromFiles.getLong("miner.server.workSubmissionRateLimitInMills");
     }

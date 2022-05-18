@@ -17,6 +17,7 @@
  */
 package co.rsk.rpc.netty.http;
 
+import co.rsk.rpc.netty.http.dto.ModuleConfigDTO;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.socket.SocketChannel;
@@ -24,11 +25,19 @@ import io.netty.handler.codec.http.HttpServerCodec;
 
 public class HttpServerInitializer extends ChannelInitializer<SocketChannel> {
 
+    private ModuleConfigDTO moduleConfigDTO;
+
+    private HttpServerInitializer() { }
+
+    public HttpServerInitializer(ModuleConfigDTO moduleConfigDTO) {
+        this.moduleConfigDTO = moduleConfigDTO;
+    }
+
     @Override
     protected void initChannel(SocketChannel ch) {
         ChannelPipeline pipeline = ch.pipeline();
         pipeline.addLast("httpServerCodec", new HttpServerCodec());
-        pipeline.addLast("httpServerHandler", new HttpServerHandler());
+        pipeline.addLast("httpServerHandler", new HttpServerHandler(moduleConfigDTO));
     }
 
 }
