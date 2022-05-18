@@ -1180,7 +1180,7 @@ public class RskContext implements NodeContext, NodeBootstrapper {
 
         int bloomsCacheSize = getRskSystemProperties().getBloomsCacheSize();
         Path bloomsStorePath = Paths.get(getRskSystemProperties().databaseDir(), "blooms");
-        KeyValueDataSource ds = RocksDbDataSource.makeDataSource(bloomsStorePath);
+        KeyValueDataSource ds = KeyValueDataSource.makeDataSource(bloomsStorePath, getRskSystemProperties().databaseKind());
 
         if (bloomsCacheSize != 0) {
             CacheSnapshotHandler cacheSnapshotHandler = getRskSystemProperties().shouldPersistBloomsCacheSnapshot()
