@@ -39,10 +39,10 @@ public class BridgeTestNetConstants extends BridgeConstants {
     BridgeTestNetConstants() {
         btcParamsString = NetworkParameters.ID_TESTNET;
 
-        BtcECKey federator0PublicKey = BtcECKey.fromPublicOnly(Hex.decode("039a060badbeb24bee49eb2063f616c0f0f0765d4ca646b20a88ce828f259fcdb9"));
-        BtcECKey federator1PublicKey = BtcECKey.fromPublicOnly(Hex.decode("02afc230c2d355b1a577682b07bc2646041b5d0177af0f98395a46018da699b6da"));
-        BtcECKey federator2PublicKey = BtcECKey.fromPublicOnly(Hex.decode("0344a3c38cd59afcba3edcebe143e025574594b001700dec41e59409bdbd0f2a09"));
-        BtcECKey federator3PublicKey = BtcECKey.fromPublicOnly(Hex.decode("034844a99cd7028aa319476674cc381df006628be71bc5593b8b5fdb32bb42ef85"));
+        BtcECKey federator0PublicKey = BtcECKey.fromPublicOnly(Hex.decode("020dfaa261fb7ea99f29b2f25cec9c49b6fe47daca5138b4f5443ba261547817f6")); // generator = hop-public-key-1
+        BtcECKey federator1PublicKey = BtcECKey.fromPublicOnly(Hex.decode("0303d2e83183329a7fd3020b93d5d58e9ec74ecc6f49cf84b1886045b6436729ad")); // generator = hop-public-key-2
+        BtcECKey federator2PublicKey = BtcECKey.fromPublicOnly(Hex.decode("039798305ba4f07bb65ee01cf3be29dc25bdfa4e3e39b04af95a02fb0a68a47a29")); // generator = hop-public-key-3
+        BtcECKey federator3PublicKey = BtcECKey.fromPublicOnly(Hex.decode("02f29ce76c569fdac0cc9d6f67dc1fbdb835271ee5e1e066d0e90cded48e59e9f4")); // generator = hop-public-key-4
 
         List<BtcECKey> genesisFederationPublicKeys = Arrays.asList(federator0PublicKey, federator1PublicKey, federator2PublicKey, federator3PublicKey);
 
@@ -50,9 +50,8 @@ public class BridgeTestNetConstants extends BridgeConstants {
         // Change upon implementation of the <INSERT FORK NAME HERE> fork.
         List<FederationMember> federationMembers = FederationMember.getFederationMembersFromKeys(genesisFederationPublicKeys);
 
-        // Currently set to:
-        // Currently set to: Monday, October 8, 2018 12:00:00 AM GMT-03:00
-        Instant genesisFederationAddressCreatedAt = Instant.ofEpochMilli(1538967600l);
+        // Currently set to: Thursday, May 19 2022 12:00:00 AM GMT-03:00
+        Instant genesisFederationAddressCreatedAt = Instant.ofEpochMilli(1652929200l);
 
         genesisFederation = new Federation(
                 federationMembers,
@@ -61,8 +60,8 @@ public class BridgeTestNetConstants extends BridgeConstants {
                 getBtcParams()
         );
 
-        btc2RskMinimumAcceptableConfirmations = 10;
-        btc2RskMinimumAcceptableConfirmationsOnRsk = 10;
+        btc2RskMinimumAcceptableConfirmations = 1;
+        btc2RskMinimumAcceptableConfirmationsOnRsk = 5;
         rsk2BtcMinimumAcceptableConfirmations = 10;
 
         updateBridgeExecutionPeriod = 3 * 60 * 1000; // 3 minutes
@@ -76,9 +75,9 @@ public class BridgeTestNetConstants extends BridgeConstants {
 
         // Passphrases are kept private
         List<ECKey> federationChangeAuthorizedKeys = Arrays.stream(new String[]{
-                "04d9052c2022f6f35da53f04f02856ff5e59f9836eec03daad0328d12c5c66140205da540498e46cd05bf63c1201382dd84c100f0d52a10654159965aea452c3f2",
-                "04bf889f2035c8c441d7d1054b6a449742edd04d202f44a29348b4140b34e2a81ce66e388f40046636fd012bd7e3cecd9b951ffe28422334722d20a1cf6c7926fb",
-                "047e707e4f67655c40c539363fb435d89574b8fe400971ba0290de9c2adbb2bd4e1e5b35a2188b9409ff2cc102292616efc113623483056bb8d8a02bf7695670ea"
+                "044dbcc0522b173906a0bb921fabb1ae0eb9a9908ec939569fd30ab1ca280b2e4c78852ddbf12f2f81270e158cf85ebb9772113cbf3786124542363370625f4c94",
+                "04607472cc3432aee55715b26a2c216c999ccaf479c2e8bb77b73def5e58b38c2effd0093b914a1a90169494db786d98f74e18d7a0ed7614a15bdbf26110456ca3",
+                "04b8c1536b32dda13cefa080925a5dd4a954a50f5e0b5bdb995bc87eb531feaa4f1211066aac6b03e64cfb97228bd3839bf352aa1a6e7c9c4a2875c4a9a2354a08"
         }).map(hex -> ECKey.fromPublicOnly(Hex.decode(hex))).collect(Collectors.toList());
 
         federationChangeAuthorizer = new AddressBasedAuthorizer(
@@ -99,7 +98,7 @@ public class BridgeTestNetConstants extends BridgeConstants {
         federationActivationAge = 60L;
 
         fundsMigrationAgeSinceActivationBegin = 60L;
-        fundsMigrationAgeSinceActivationEnd = 900L;
+        fundsMigrationAgeSinceActivationEnd = 10_000L;
 
         List<ECKey> feePerKbAuthorizedKeys = Arrays.stream(new String[]{
                 "04701d1d27f8c2ae97912d96fb1f82f10c2395fd320e7a869049268c6b53d2060dfb2e22e3248955332d88cd2ae29a398f8f3858e48dd6d8ffbc37dfd6d1aa4934",
@@ -152,9 +151,9 @@ public class BridgeTestNetConstants extends BridgeConstants {
 
         minimumPegoutValuePercentageToReceiveAfterFee = 80;
 
-        maxInputsPerPegoutTransaction = 50;
+        maxInputsPerPegoutTransaction = 5;
 
-        numberOfBlocksBetweenPegouts = 360; // 3 hours of RSK blocks (considering 1 block every 30 seconds)
+        numberOfBlocksBetweenPegouts = 20; // 10 Minutes of RSK blocks (considering 1 block every 30 seconds)
     }
 
     public static BridgeTestNetConstants getInstance() {
